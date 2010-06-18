@@ -15,7 +15,7 @@ case class User(
         emailAddress: String,
         password: String,
         name: Option[String],
-        lists: List[String]) extends MongoDocument[User] {
+        var lists: List[String]) extends MongoDocument[User] {
   def meta = User
 }
 
@@ -34,13 +34,22 @@ class FirstMongoHack extends FunSuite with ShouldMatchers {
   }
 
 
-  ignore("add graham to a list") {
-    User.update( ("emailAddress" -> "graham@tackley.net") ~ ("lists" -> ("$ne" -> "system/comment/blockthebastard")), 
-      "$push" -> ("lists" -> "system/comment/blockthebastard" ) )
-    User.update("emailAddress" -> "swells@pants.net",
-      "$push" -> ("lists" -> "subscribe" ) )
-    User.update("emailAddress" -> "kenlimfc@gmail.com",
-      "$push" -> ("lists" -> "system/comment/awesome" ) )
+  test("add graham to a list") {
+    User.update(
+      "emailAddress" -> "graham@tackley.net",
+      "$addToSet" -> ("lists" -> "should_only_be_added_once" ) )
+    
+//    User.update("emailAddress" -> "swells@pants.net",
+//      "$push" -> ("lists" -> "subscribe" ) )
+//    User.update("emailAddress" -> "kenlimfc@gmail.com",
+//      "$push" -> ("lists" -> "system/comment/awesome" ) )
+  }
+
+  ignore("rename an entry in a list") {
+    User.update(
+      "lists" -> "system/comment/blockthebastard",
+      "$set" -> ( "lists.$" -> "nocomment" )
+      )
   }
 
   def validateUser(email: String, password: String): Option[User] =
@@ -54,5 +63,11 @@ class FirstMongoHack extends FunSuite with ShouldMatchers {
 
   test("tell me the subscribers") {
     User.findAll("lists" -> "subscribe").foreach(println(_))
+  }
+
+  ignore("edit a specific user") {
+    val gt = User.find("emailAddress" -> "graham@tackley.net").get
+    gt.lists = List("new", "stuff")
+    gt.save
   }
 }
