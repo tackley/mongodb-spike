@@ -2,12 +2,13 @@ package net.tackley
 
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.FunSuite
-import com.mongodb.DB
 import net.liftweb.mongodb._
 import org.bson.types.ObjectId
 import net.liftweb.json.JsonAST._
 import net.liftweb.json.JsonParser._
 import net.liftweb.json.JsonDSL._
+import com.mongodb.DB.WriteConcern
+import com.mongodb.{MongoException, DB}
 
 
 case class User(
@@ -23,8 +24,24 @@ object User extends MongoDocumentMeta[User] {
   
 }
 
+/*
+case class MongoAddress(host: MongoHost, name: String) {
+  def db = host.mongo.getDB(name)
+
+  override def toString = host.host+":"+host.port+"/"+name
+}
+
+ */
+
+case class StrictMongoAddress(override val host: MongoHost, override val name: String)
+        extends MongoAddress(host, name) {
+  override def db = strict(host.mongo.getDB(name))
+
+  def strict(db: DB) = { db.setWriteConcern(WriteConcern.STRICT); db }
+}
+
 class FirstMongoHack extends FunSuite with ShouldMatchers {
-  MongoDB.defineDb(DefaultMongoIdentifier, MongoAddress(MongoHost("localhost", 27017), "test"))
+  MongoDB.defineDb(DefaultMongoIdentifier, StrictMongoAddress(MongoHost("localhost", 27017), "test"))
 
   ignore("insert some users") {
     User.drop
@@ -69,5 +86,15 @@ class FirstMongoHack extends FunSuite with ShouldMatchers {
     val gt = User.find("emailAddress" -> "graham@tackley.net").get
     gt.lists = List("new", "stuff")
     gt.save
+  }
+
+  test("try to create dodgy duplicate") {
+    // this test only passes thanks to the "StrictMongoAddress" above
+    // i.e. only when the DB (or Collection) object has a WriteConcern of STRICT
+    User.ensureIndex("emailAddress" -> 1, true)
+    evaluating {
+      User(ObjectId.get.toString, "graham2@tackley.net", "first", None, Nil).save
+      User(ObjectId.get.toString, "graham2@tackley.net", "second", None, Nil).save
+    } should produce [MongoException.DuplicateKey]
   }
 }
